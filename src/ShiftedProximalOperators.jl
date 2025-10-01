@@ -42,8 +42,10 @@ include("shiftedNormL1B2.jl")
 include("shiftedNormL1Box.jl")
 include("shiftedIndBallL0.jl")
 include("shiftedIndBallL0BInf.jl")
+include("shiftedIndBallL0Box.jl")
 include("shiftedRootNormLhalfBox.jl")
 include("shiftedGroupNormL2Binf.jl")
+include("shiftedGroupNormL2Box.jl")
 include("shiftedRank.jl")
 include("shiftedCappedl1.jl")
 include("shiftedNuclearnorm.jl")
@@ -97,6 +99,8 @@ end
 set_radius!(ψ::ShiftedNormL0Box, Δ::R) where {R <: Real} = set_bounds!(ψ, -Δ, Δ)
 set_radius!(ψ::ShiftedNormL1Box, Δ::R) where {R <: Real} = set_bounds!(ψ, -Δ, Δ)
 set_radius!(ψ::ShiftedRootNormLhalfBox, Δ::R) where {R <: Real} = set_bounds!(ψ, -Δ, Δ)
+set_radius!(ψ::ShiftedIndBallL0Box, Δ::R) where {R <: Real} = set_bounds!(ψ, -Δ, Δ)
+set_radius!(ψ::ShiftedGroupNormL2Box, Δ::R) where {R <: Real} = set_bounds!(ψ, -Δ, Δ)
 
 """
     set_bounds!(ψ, l, u)
@@ -115,6 +119,28 @@ end
     return ψ.h.lambda
   elseif prop === :r
     return ψ.h.r
+  elseif prop === :Δ
+    # For Box variants, convert symmetric box constraints back to radius
+    if hasfield(typeof(ψ), :l) && hasfield(typeof(ψ), :u)
+      l = getfield(ψ, :l)
+      u = getfield(ψ, :u)
+      if isa(l, Real) && isa(u, Real) && l == -u
+        return u  # Return radius when box is symmetric [-Δ, Δ]
+      elseif isa(l, AbstractVector) && isa(u, AbstractVector) && all(l .== -u)
+        return u[1]  # Return radius when all elements are symmetric
+      else
+        error("Cannot convert asymmetric box constraints to radius Δ")
+      end
+    else
+      return getfield(ψ, prop)  # Fall back to field access for Binf types
+    end
+  elseif prop === :χ
+    # For backward compatibility, provide a dummy χ for Box variants
+    if hasfield(typeof(ψ), :l) && hasfield(typeof(ψ), :u)
+      return Conjugate(IndBallL1(1.0))  # Dummy conjugate
+    else
+      return getfield(ψ, prop)
+    end
   else
     return getfield(ψ, prop)
   end

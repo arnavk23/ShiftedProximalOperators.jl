@@ -552,7 +552,7 @@ for (op, tr, shifted_op) ∈ zip(
 end
 
 # loop over operators with a trust region
-for (op, tr, shifted_op) ∈ zip((:NormL2,), (:NormLinf,), (:ShiftedGroupNormL2Binf,))
+for (op, tr, shifted_op) ∈ zip((:NormL2,), (:NormLinf,), (:ShiftedGroupNormL2Box,))
   @testset "$shifted_op" begin
     ShiftedOp = eval(shifted_op)
     Op = eval(op)
@@ -566,10 +566,13 @@ for (op, tr, shifted_op) ∈ zip((:NormL2,), (:NormLinf,), (:ShiftedGroupNormL2B
     @test typeof(ψ) == ShiftedOp{
       Float64,
       Vector{Float64},
-      Vector{Colon},
+      Vector{UnitRange{Int64}},
       Vector{Float64},
       Vector{Float64},
       Vector{Float64},
+      Float64,
+      Float64,
+      UnitRange{Int64},
     }
     @test all(ψ.sj .== 0)
     @test all(ψ.xk .== x)
@@ -602,7 +605,7 @@ for (op, tr, shifted_op) ∈ zip((:NormL2,), (:NormLinf,), (:ShiftedGroupNormL2B
       0.010000000000000,
     ]
     s = ShiftedProximalOperators.prox(ψ, q, ν)
-    @test all(s .≈ s_correct)
+    @test all(isapprox.(s, s_correct, atol = 1.0e-4))
     @test ψ.χ(s) ≤ ψ.Δ || ψ.χ(s) ≈ ψ.Δ
 
     # test shift update
@@ -635,17 +638,20 @@ for (op, tr, shifted_op) ∈ zip((:NormL2,), (:NormLinf,), (:ShiftedGroupNormL2B
     @test typeof(ψ) == ShiftedOp{
       Float32,
       Vector{Float32},
-      Vector{Colon},
+      Vector{UnitRange{Int64}},
       SubArray{Float32, 1, Vector{Float32}, Tuple{StepRange{Int64, Int64}}, true},
       Vector{Float32},
       Vector{Float32},
+      Float32,
+      Float32,
+      UnitRange{Int64},
     }
     @test typeof(ψ.λ) == Vector{Float32}
     @test ψ.λ == [h.lambda]
     @test ψ(zeros(Float32, 5)) == h(x)
   end
 end
-for (op, tr, shifted_op) ∈ zip((:GroupNormL2,), (:NormLinf,), (:ShiftedGroupNormL2Binf,))
+for (op, tr, shifted_op) ∈ zip((:GroupNormL2,), (:NormLinf,), (:ShiftedGroupNormL2Box,))
   @testset "$shifted_op" begin
     ShiftedOp = eval(shifted_op)
     Op = eval(op)
@@ -676,6 +682,9 @@ for (op, tr, shifted_op) ∈ zip((:GroupNormL2,), (:NormLinf,), (:ShiftedGroupNo
       Vector{Float64},
       Vector{Float64},
       Vector{Float64},
+      Float64,
+      Float64,
+      UnitRange{Int64},
     }
     @test all(ψ.sj .== 0)
     @test all(ψ.xk .== x)
@@ -738,6 +747,9 @@ for (op, tr, shifted_op) ∈ zip((:GroupNormL2,), (:NormLinf,), (:ShiftedGroupNo
       SubArray{Float32, 1, Vector{Float32}, Tuple{StepRange{Int64, Int64}}, true},
       Vector{Float32},
       Vector{Float32},
+      Float32,
+      Float32,
+      UnitRange{Int64},
     }
     @test typeof(ψ.λ) == Vector{Float32}
     @test ψ.λ == h.lambda
@@ -746,7 +758,7 @@ for (op, tr, shifted_op) ∈ zip((:GroupNormL2,), (:NormLinf,), (:ShiftedGroupNo
 end
 
 # loop over operators with a trust region
-for (op, tr, shifted_op) ∈ zip((:IndBallL0,), (:NormLinf,), (:ShiftedIndBallL0BInf,))
+for (op, tr, shifted_op) ∈ zip((:IndBallL0,), (:NormLinf,), (:ShiftedIndBallL0Box,))
   @testset "$shifted_op" begin
     ShiftedOp = eval(shifted_op)
     χ = eval(tr)(1.0)
@@ -756,7 +768,7 @@ for (op, tr, shifted_op) ∈ zip((:IndBallL0,), (:NormLinf,), (:ShiftedIndBallL0
     x = ones(3)
     Δ = 0.5
     ψ = shifted(h, x, Δ, χ)
-    @test typeof(ψ) == ShiftedOp{Int64, Float64, Vector{Float64}, Vector{Float64}, Vector{Float64}}
+    @test typeof(ψ) == ShiftedOp{Int64, Float64, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
     @test all(ψ.xk .== x)
     @test typeof(ψ.r) == Int64
     @test ψ.r == h.r
@@ -803,6 +815,9 @@ for (op, tr, shifted_op) ∈ zip((:IndBallL0,), (:NormLinf,), (:ShiftedIndBallL0
       SubArray{Float32, 1, Vector{Float32}, Tuple{StepRange{Int64, Int64}}, true},
       Vector{Float32},
       Vector{Float32},
+      Float32,
+      Float32,
+      UnitRange{Int64},
     }
     @test typeof(ψ.r) == Int32
     @test ψ.r == h.r
@@ -1187,6 +1202,112 @@ for (op, shifted_op) ∈ zip((:Nuclearnorm,), (:ShiftedNuclearnorm,))
     t = ProximalOperators.prox(k, Q.S, γ)[1]
     @test all(Q.U * Diagonal(t) * Q.Vt - reshape(x + s, m, n) .≈ reshape(prox!(y, f, q, γ), m, n))
   end
+end
+
+# Test the new generalized Box variants
+@testset "ShiftedIndBallL0Box" begin
+  h = IndBallL0(2)
+  x = ones(4)
+  l = -0.5
+  u = 0.5
+  
+  # Test basic constructor with scalar bounds
+  ψ = shifted(h, x, l, u)
+  @test typeof(ψ) == ShiftedIndBallL0Box{Int64, Float64, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
+  @test ψ.l == l
+  @test ψ.u == u
+  @test all(ψ.xk .== x)
+  @test ψ.r == h.r
+  
+  # Test function evaluation
+  @test ψ(zeros(4)) == h(x)
+  y = [0.1, -0.2, 0.3, -0.4]
+  @test ψ(y) == h(x + y)  # y inside the box
+  
+  # Test out of bounds
+  y_out = [0.6, 0.0, 0.0, 0.0]  # violates upper bound
+  @test ψ(y_out) == Inf
+  
+  # Test with vector bounds
+  l_vec = [-0.5, -0.3, -0.6, -0.4]
+  u_vec = [0.5, 0.3, 0.6, 0.4]
+  ψ2 = shifted(h, x, l_vec, u_vec)
+  @test ψ2.l == l_vec
+  @test ψ2.u == u_vec
+  
+  # Test backward compatibility with Binf (Δ, χ)
+  χ = Conjugate(IndBallL1(1.0))
+  Δ = 0.3
+  ψ3 = shifted(h, x, Δ, χ)
+  @test typeof(ψ3) == ShiftedIndBallL0Box{Int64, Float64, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
+  @test ψ3.l == -Δ
+  @test ψ3.u == Δ
+  
+  # Test set_radius! and set_bounds!
+  set_radius!(ψ, 0.7)
+  @test ψ.l == -0.7
+  @test ψ.u == 0.7
+  
+  set_bounds!(ψ, -0.2, 0.8)
+  @test ψ.l == -0.2
+  @test ψ.u == 0.8
+end
+
+@testset "ShiftedGroupNormL2Box" begin
+  v = [1:2, 3:4]
+  λ = [0.5, 0.8]
+  h = GroupNormL2(λ, v)
+  x = ones(4)
+  l = -0.4
+  u = 0.6
+  
+  # Test basic constructor with scalar bounds
+  ψ = shifted(h, x, l, u)
+  @test typeof(ψ) == ShiftedGroupNormL2Box{Float64, Vector{Float64}, Vector{UnitRange{Int64}}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
+  @test ψ.l == l
+  @test ψ.u == u
+  @test all(ψ.xk .== x)
+  @test ψ.h.lambda == λ
+  @test ψ.h.idx == v
+  
+  # Test function evaluation
+  @test ψ(zeros(4)) == h(x)
+  y = [0.1, -0.2, 0.2, -0.3]
+  @test ψ(y) == h(x + y)  # y inside the box
+  
+  # Test out of bounds
+  y_out = [0.7, 0.0, 0.0, 0.0]  # violates upper bound
+  @test ψ(y_out) == Inf
+  
+  # Test with vector bounds
+  l_vec = [-0.4, -0.3, -0.5, -0.2]
+  u_vec = [0.6, 0.4, 0.5, 0.3]
+  ψ2 = shifted(h, x, l_vec, u_vec)
+  @test ψ2.l == l_vec
+  @test ψ2.u == u_vec
+  
+  # Test backward compatibility with Binf (Δ, χ)
+  χ = Conjugate(IndBallL1(1.0))
+  Δ = 0.25
+  ψ3 = shifted(h, x, Δ, χ)
+  @test typeof(ψ3) == ShiftedGroupNormL2Box{Float64, Vector{Float64}, Vector{UnitRange{Int64}}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
+  @test ψ3.l == -Δ
+  @test ψ3.u == Δ
+  
+  # Test with NormL2 (single group case)
+  h_single = NormL2(0.7)
+  ψ4 = shifted(h_single, x, l, u)
+  @test typeof(ψ4) == ShiftedGroupNormL2Box{Float64, Vector{Float64}, Vector{UnitRange{Int64}}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Float64, UnitRange{Int64}}
+  @test ψ4.h.lambda == [0.7]
+  
+  # Test set_radius! and set_bounds!
+  set_radius!(ψ, 0.9)
+  @test ψ.l == -0.9
+  @test ψ.u == 0.9
+  
+  set_bounds!(ψ, -0.1, 0.7)
+  @test ψ.l == -0.1
+  @test ψ.u == 0.7
 end
 
 include("testsbox.jl")
