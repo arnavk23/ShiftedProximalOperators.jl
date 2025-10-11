@@ -58,7 +58,7 @@ shifted(
   selected::AbstractArray{T} = 1:length(xk),
 ) where {I <: Integer, R <: Real, T <: Integer} = ShiftedIndBallL0Box(h, xk, zero(xk), l, u, false, selected)
 
-# Backward compatibility: Convert Binf constraints (Δ, χ) to Box constraints [-Δ, Δ]  
+# Backward compatibility: Convert Binf constraints (Δ, χ) to Box constraints [-Δ, Δ]
 shifted(
   h::IndBallL0{I},
   xk::AbstractVector{R},
