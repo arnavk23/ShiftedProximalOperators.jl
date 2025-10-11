@@ -151,6 +151,5 @@ function prox!(
     
     y[idx] .= y_temp
   end
-  
   return y
 end
