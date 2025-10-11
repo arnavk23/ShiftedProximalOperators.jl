@@ -124,7 +124,6 @@ function prox!(
   VI <: AbstractArray{<:Integer},
 }
   ψ.sol .= q .+ ψ.xk .+ ψ.sj
-  
   # Helper functions for group norm computation
   l2prox(x, a) = max(0, 1 - a / norm(x)) .* x
   
