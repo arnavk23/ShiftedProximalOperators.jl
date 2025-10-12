@@ -53,8 +53,43 @@ include("shiftedCappedl1.jl")
 include("shiftedNuclearnorm.jl")
 
 function (ψ::ShiftedProximableFunction)(y)
-  @. ψ.xsy = ψ.xk + ψ.sj + y
-  return ψ.h(ψ.xsy)
+  # assign elementwise to avoid temporary allocations from broadcasted RHS
+  for i in eachindex(ψ.xsy)
+    ψ.xsy[i] = ψ.xk[i] + ψ.sj[i] + y[i]
+  end
+  # Fast, allocation-friendly evaluations for common proximable h types
+  h = ψ.h
+  if isa(h, NormL1)
+    λ = h.lambda
+    s = zero(eltype(ψ.xsy))
+    for i in eachindex(ψ.xsy)
+      s += abs(ψ.xsy[i])
+    end
+    return λ * s
+  elseif isa(h, NormL0)
+    λ = h.lambda
+    cnt = zero(Int)
+    for i in eachindex(ψ.xsy)
+      cnt += (ψ.xsy[i] == zero(eltype(ψ.xsy))) ? 0 : 1
+    end
+    return λ * cnt
+  elseif isa(h, RootNormLhalf)
+    λ = h.lambda
+    s = zero(eltype(ψ.xsy))
+    for i in eachindex(ψ.xsy)
+      s += sqrt(abs(ψ.xsy[i]))
+    end
+    return λ * s
+  elseif isa(h, NormL2)
+    λ = h.lambda
+    s = zero(eltype(ψ.xsy))
+    for i in eachindex(ψ.xsy)
+      s += ψ.xsy[i]^2
+    end
+    return 0.5 * λ * s
+  else
+    return h(ψ.xsy)
+  end
 end
 
 function (ψ::ShiftedCompositeProximableFunction)(y)

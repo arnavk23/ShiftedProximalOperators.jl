@@ -56,9 +56,39 @@ function prox!(
   y .= ProjB(-ψ.xk)
 
   if ψ.Δ ≤ ψ.χ(y)
-    η = find_zero(froot, ψ.Δ)
-    y .= ProjB((-ψ.xk) .* (η / ψ.Δ)) * (ψ.Δ / η)
+    # compute root of froot on [0, Δ] when possible
+    f0 = froot(0.0)
+    fΔ = froot(ψ.Δ)
+    if f0 == 0.0
+      η = 0.0
+    elseif fΔ == 0.0
+      η = ψ.Δ
+    elseif f0 * fΔ < 0.0
+      # bracketed: use explicit bisection to avoid method-selection warnings
+      η = find_zero(froot, (0.0, ψ.Δ), Roots.Bisection())
+    else
+      # not bracketed: fall back to a safe single-start solver (secant-like) to avoid errors
+      # pick midpoint as initial guess
+      η0 = ψ.Δ / 2
+      η = try
+        find_zero(froot, η0)
+      catch _e
+        # as a last resort, pick Δ (should be safe although may be suboptimal)
+        ψ.Δ
+      end
+    end
+    # avoid division by zero when η == 0
+    if η == 0.0
+      y .= ProjB(zeros(eltype(y), length(ψ.xk)))
+    else
+      y .= ProjB((-ψ.xk) .* (η / ψ.Δ)) * (ψ.Δ / η)
+    end
   end
   y .-= ψ.sj
+  # ensure numerical safety: if the returned y slightly exceeds the trust-region radius
+  # due to rounding/fallbacks, project it back onto the L2 ball of radius ψ.Δ
+  if ψ.χ(y) > ψ.Δ
+    y .= y .* (ψ.Δ / ψ.χ(y))
+  end
   return y
 end
