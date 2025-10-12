@@ -134,19 +134,11 @@ function prox!(
     y_temp = l2prox(ψ.sol[idx] .- ψ.xk[idx] .- ψ.sj[idx], σλ)
     
     # Apply box constraints elementwise
-    # Handle the special case where idx is Colon (meaning all indices)
-    if idx isa Colon
-      for i ∈ eachindex(y_temp)
-        li = isa(ψ.l, Real) ? ψ.l : ψ.l[i]
-        ui = isa(ψ.u, Real) ? ψ.u : ψ.u[i]
-        y_temp[i] = min(max(y_temp[i], li), ui)
-      end
-    else
-      for (i, global_i) ∈ enumerate(idx)
-        li = isa(ψ.l, Real) ? ψ.l : ψ.l[global_i]
-        ui = isa(ψ.u, Real) ? ψ.u : ψ.u[global_i]
-        y_temp[i] = min(max(y_temp[i], li), ui)
-      end
+    # Apply box constraints elementwise for each index in idx
+    for (i, global_i) ∈ enumerate(idx)
+      li = isa(ψ.l, Real) ? ψ.l : ψ.l[global_i]
+      ui = isa(ψ.u, Real) ? ψ.u : ψ.u[global_i]
+      y_temp[i] = min(max(y_temp[i], li), ui)
     end
     
     y[idx] .= y_temp
