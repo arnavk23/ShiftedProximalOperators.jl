@@ -86,7 +86,7 @@ function (ψ::ShiftedProximableFunction)(y)
     for i in eachindex(ψ.xsy)
       s += ψ.xsy[i]^2
     end
-    return 0.5 * λ * s
+    return λ * sqrt(s)
   else
     return h(ψ.xsy)
   end
