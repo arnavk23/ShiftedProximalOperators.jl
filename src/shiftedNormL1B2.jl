@@ -72,8 +72,8 @@ function prox!(
       η0 = ψ.Δ / 2
       η = try
         find_zero(froot, η0)
-      catch _e
-        # as a last resort, pick Δ (should be safe although may be suboptimal)
+      catch e
+        @warn "Root finding failed with error: $e. Falling back to Δ." exception=(e, catch_backtrace())
         ψ.Δ
       end
     end
