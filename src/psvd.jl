@@ -227,7 +227,7 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
   @eval begin
     function psvd_workspace_qr(A::StridedMatrix{$elty}; full::Bool = false)
       jobuvt = full ? 'A' : 'S'
-      m, n = size(A)                                    # fixed: define m,n
+      m, n = size(A)
       minmn = min(m, n)
       S = similar(A, $relty, minmn)
       U = similar(A, $elty, jobuvt == 'A' ? (m, m) : (m, minmn))
