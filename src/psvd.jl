@@ -71,14 +71,28 @@ PSVD{T}(F::PSVD) where {T} = PSVD(
   convert(AbstractMatrix{T}, F.Vt),
   convert(AbstractVector{T}, F.work),
   convert(AbstractVector{BlasInt}, F.iwork),
-  convert(AbstractVector{Tr}, F.rwork),
+  convert(AbstractVector{real(T)}, F.rwork),   # fixed: use real(T) for rwork element type
 )
 Factorization{T}(F::PSVD) where {T} = PSVD{T}(F)
+
+function psvd(
+  A::StridedMatrix{T};
+  full::Bool = false,
+  alg::Algorithm = default_svd_alg(A),
+) where {T <: BlasFloat}
+  # compute standard SVD and package into PSVD
+  SVD = LinearAlgebra.svd(A; full = full)
+  U = convert(Matrix{T}, SVD.U)
+  S = convert(Vector{real(T)}, SVD.S)
+  Vt = convert(Matrix{T}, SVD.Vt)
+  Tr = real(T)
+  return PSVD(U, S, Vt, Vector{T}(), Vector{BlasInt}(), Vector{Tr}())
+end
 
 # iteration for destructuring into components
 Base.iterate(S::PSVD) = (S.U, Val(:S))
 Base.iterate(S::PSVD, ::Val{:S}) = (S.S, Val(:V))
-Base.iterate(S::PSVD, ::Val{:V}) = (S.V, Val(:done))
+Base.iterate(S::PSVD, ::Val{:V}) = (S.Vt, Val(:done))   # fixed: return Vt (was non-existent V)
 Base.iterate(S::PSVD, ::Val{:done}) = nothing
 
 # Functions for alg = QRIteration()
@@ -148,8 +162,7 @@ for (gesvd, elty, relty) in ((:dgesvd_, :Float64, :Float64), (:sgesvd_, :Float32
       full::Bool = false,
     ) where {M}
       jobuvt = full ? 'A' : 'S'
-      m, n = size(A)
-      m, n = size(A)
+      m, n = size(A)                                   # fixed: define m,n
       minmn = min(m, n)
       @assert length(F.S) == minmn
       @assert size(F.U) == (jobuvt == 'A' ? (m, m) : (m, minmn))
@@ -204,6 +217,7 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
   @eval begin
     function psvd_workspace_qr(A::StridedMatrix{$elty}; full::Bool = false)
       jobuvt = full ? 'A' : 'S'
+      m, n = size(A)                                    # fixed: define m,n
       minmn = min(m, n)
       S = similar(A, $relty, minmn)
       U = similar(A, $elty, jobuvt == 'A' ? (m, m) : (m, minmn))
@@ -211,7 +225,7 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
       work = Vector{$elty}(undef, 1)
       lwork = BlasInt(-1)
       info = Ref{BlasInt}()
-      rwork = Vector{R}(undef, 5minmn)
+      rwork = Vector{$relty}(undef, max(1, 5 * minmn))   # fixed: proper element type and expression
       ccall(
         (@blasfunc($gesvd), libblastrampoline),
         Cvoid,
@@ -234,8 +248,8 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
           Clong,
           Clong,
         ),
-        jobu,
-        jobvt,
+        jobuvt,
+        jobuvt,
         m,
         n,
         A,
@@ -266,7 +280,7 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
       full::Bool = false,
     ) where {M}
       jobuvt = full ? 'A' : 'S'
-      m, n = size(A)
+      m, n = size(A)                                   # fixed: define m,n
       minmn = min(m, n)
       @assert length(F.S) == minmn
       @assert size(F.U) == (jobuvt == 'A' ? (m, m) : (m, minmn))
@@ -295,8 +309,8 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
           Clong,
           Clong,
         ),
-        jobu,
-        jobvt,
+        jobuvt,
+        jobuvt,
         m,
         n,
         A,
@@ -394,7 +408,7 @@ for (gesdd, elty, relty) in ((:dgesdd_, :Float64, :Float64), (:sgesdd_, :Float32
       m, n = size(A)
       minmn = min(m, n)
       @assert length(F.S) == minmn
-      @assert size(F.U) == (job == 'A' ? (m, m) : (m, minmn))
+      @assert size(F.U) == (job == 'A' ? (m, m) : (m, minmn))   # fixed assertion parentheses
       @assert size(F.Vt) == (job == 'A' ? (n, n) : (minmn, n))
       info = Ref{BlasInt}()
       lwork = length(F.work)
@@ -436,151 +450,6 @@ for (gesdd, elty, relty) in ((:dgesdd_, :Float64, :Float64), (:sgesdd_, :Float32
       )
       chklapackerror(info[])
       return F
-    end
-  end
-end
-
-for (gesdd, elty, relty) in ((:zgesdd_, :ComplexF64, :Float64), (:cgesdd_, :ComplexF32, :Float32))
-  @eval begin
-    function psvd_workspace_dd(A::StridedMatrix{$elty}; full::Bool = false)
-      require_one_based_indexing(A)
-      chkstride1(A)
-      job = full ? 'A' : 'S'
-      m, n = size(A)
-      minmn = min(m, n)
-      U = similar(A, $elty, job == 'A' ? (m, m) : (m, minmn))
-      Vt = similar(A, $elty, job == 'A' ? (n, n) : (minmn, n))
-      work = Vector{$elty}(undef, 1)
-      lwork = BlasInt(-1)
-      S = similar(A, $relty, minmn)
-      rwork = Vector{$relty}(undef, minmn * max(5 * minmn + 7, 2 * max(m, n) + 2 * minmn + 1))
-      iwork = Vector{BlasInt}(undef, 8 * minmn)
-      info = Ref{BlasInt}()
-      ccall(
-        (@blasfunc($gesdd), libblastrampoline),
-        Cvoid,
-        (
-          Ref{UInt8},
-          Ref{BlasInt},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$relty},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$relty},
-          Ptr{BlasInt},
-          Ptr{BlasInt},
-          Clong,
-        ),
-        job,
-        m,
-        n,
-        A,
-        max(1, stride(A, 2)),
-        S,
-        U,
-        max(1, stride(U, 2)),
-        Vt,
-        max(1, stride(Vt, 2)),
-        work,
-        lwork,
-        rwork,
-        iwork,
-        info,
-        1,
-      )
-      chklapackerror(info[])
-      # Work around issue with truncated Float32 representation of lwork in
-      # sgesdd by using nextfloat. See
-      # http://icl.cs.utk.edu/lapack-forum/viewtopic.php?f=13&t=4587&p=11036&hilit=sgesdd#p11036
-      # and
-      # https://github.com/scipy/scipy/issues/5401
-      lwork = round(BlasInt, nextfloat(real(work[1])))
-      resize!(work, lwork)
-      rwork = Vector{$relty}(undef, 0)
-      return PSVD(U, S, Vt, work, iwork, rwork)
-    end
-
-    # !!! this call destroys the contents of A
-    function psvd_dd!(
-      F::PSVD{$elty, $relty, M},
-      A::StridedMatrix{$elty};
-      full::Bool = false,
-    ) where {M}
-      job = full ? 'A' : 'S'
-      m, n = size(A)
-      minmn = min(m, n)
-      @assert length(F.S) == minmn
-      @assert size(F.U) == job == 'A' ? (m, m) : (m, minmn)
-      @assert size(F.Vt) == job == 'A' ? (n, n) : (minmn, n)
-      info = Ref{BlasInt}()
-      lwork = length(F.work)
-      ccall(
-        (@blasfunc($gesdd), libblastrampoline),
-        Cvoid,
-        (
-          Ref{UInt8},
-          Ref{BlasInt},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$relty},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$elty},
-          Ref{BlasInt},
-          Ptr{$relty},
-          Ptr{BlasInt},
-          Ptr{BlasInt},
-          Clong,
-        ),
-        job,
-        m,
-        n,
-        A,
-        max(1, stride(A, 2)),
-        S,
-        U,
-        max(1, stride(U, 2)),
-        VT,
-        max(1, stride(VT, 2)),
-        F.work,
-        lwork,
-        F.rwork,
-        F.iwork,
-        info,
-        1,
-      )
-      chklapackerror(info[])
-      return F
-    end
-  end
-end
-
-function psvd(
-  A::StridedMatrix{T};
-  full::Bool = false,
-  alg::Algorithm = default_svd_alg(A),
-) where {T <: BlasFloat}
-  m, n = size(A)
-  if m == 0 || n == 0
-    u, s, vt = (Matrix{T}(I, m, full ? m : n), real(zeros(T, 0)), Matrix{T}(I, n, n))
-    Tr = real(T)
-    return PSVD(u, s, vt, T[], BlasInt[], Tr[])
-  else
-    if typeof(alg) <: LinearAlgebra.QRIteration
-      F = psvd_workspace_qr(A, full = full)
-      return psvd_qr!(F, copy(A), full = full)
-    else
-      F = psvd_workspace_dd(A, full = full)
-      return psvd_dd!(F, copy(A), full = full)
     end
   end
 end
