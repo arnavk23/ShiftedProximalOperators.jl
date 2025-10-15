@@ -1,7 +1,5 @@
 module ShiftedProximalOperators
 
-__precompile__(false)
-
 using LinearAlgebra
 using QRMumps
 using SparseMatricesCOO
