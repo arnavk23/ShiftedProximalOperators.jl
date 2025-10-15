@@ -71,7 +71,7 @@ PSVD{T}(F::PSVD) where {T} = PSVD(
   convert(AbstractMatrix{T}, F.Vt),
   convert(AbstractVector{T}, F.work),
   convert(AbstractVector{BlasInt}, F.iwork),
-  convert(AbstractVector{real(T)}, F.rwork),   # fixed: use real(T) for rwork element type
+  convert(AbstractVector{real(T)}, F.rwork),
 )
 Factorization{T}(F::PSVD) where {T} = PSVD{T}(F)
 
