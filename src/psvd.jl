@@ -172,7 +172,7 @@ for (gesvd, elty, relty) in ((:dgesvd_, :Float64, :Float64), (:sgesvd_, :Float32
       full::Bool = false,
     ) where {M}
       jobuvt = full ? 'A' : 'S'
-      m, n = size(A)                                   # fixed: define m,n
+      m, n = size(A)
       minmn = min(m, n)
       @assert length(F.S) == minmn
       @assert size(F.U) == (jobuvt == 'A' ? (m, m) : (m, minmn))
