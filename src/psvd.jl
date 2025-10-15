@@ -418,7 +418,7 @@ for (gesdd, elty, relty) in ((:dgesdd_, :Float64, :Float64), (:sgesdd_, :Float32
       m, n = size(A)
       minmn = min(m, n)
       @assert length(F.S) == minmn
-      @assert size(F.U) == (job == 'A' ? (m, m) : (m, minmn))   # fixed assertion parentheses
+      @assert size(F.U) == (job == 'A' ? (m, m) : (m, minmn))
       @assert size(F.Vt) == (job == 'A' ? (n, n) : (minmn, n))
       info = Ref{BlasInt}()
       lwork = length(F.work)
