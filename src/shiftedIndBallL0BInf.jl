@@ -49,12 +49,6 @@ function (ψ::ShiftedIndBallL0BInf)(y)
 end
 
 shifted(
-  h::IndBallL0{I},
-  xk::AbstractVector{R},
-  Δ::R,
-  χ::Conjugate{IndBallL1{R}},
-) where {I <: Integer, R <: Real} = ShiftedIndBallL0BInf(h, xk, zero(xk), Δ, χ, false)
-shifted(
   ψ::ShiftedIndBallL0BInf{I, R, V0, V1, V2},
   sj::AbstractVector{R},
 ) where {

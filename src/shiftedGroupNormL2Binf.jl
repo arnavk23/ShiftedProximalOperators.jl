@@ -39,15 +39,6 @@ function (ψ::ShiftedGroupNormL2Binf)(y)
 end
 
 shifted(
-  h::GroupNormL2{R, RR, I},
-  xk::AbstractVector{R},
-  Δ::R,
-  χ::Conjugate{IndBallL1{R}},
-) where {R <: Real, RR <: AbstractVector{R}, I} =
-  ShiftedGroupNormL2Binf(h, xk, zero(xk), Δ, χ, false)
-shifted(h::NormL2{R}, xk::AbstractVector{R}, Δ::R, χ::Conjugate{IndBallL1{R}}) where {R <: Real} =
-  ShiftedGroupNormL2Binf(GroupNormL2([h.lambda]), xk, zero(xk), Δ, χ, false)
-shifted(
   ψ::ShiftedGroupNormL2Binf{R, RR, I, V0, V1, V2},
   sj::AbstractVector{R},
 ) where {
