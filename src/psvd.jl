@@ -79,14 +79,24 @@ function psvd(
   A::StridedMatrix{T};
   full::Bool = false,
   alg::Algorithm = default_svd_alg(A),
+  destructive::Bool = false,
 ) where {T <: BlasFloat}
-  # compute standard SVD and package into PSVD
-  SVD = LinearAlgebra.svd(A; full = full)
-  U = convert(Matrix{T}, SVD.U)
-  S = convert(Vector{real(T)}, SVD.S)
-  Vt = convert(Matrix{T}, SVD.Vt)
-  Tr = real(T)
-  return PSVD(U, S, Vt, Vector{T}(), Vector{BlasInt}(), Vector{Tr}())
+  m, n = size(A)
+  if m == 0 || n == 0
+    u = Matrix{T}(I, m, full ? m : n)
+    s = real(zeros(T, 0))
+    vt = Matrix{T}(I, n, n)
+    Tr = real(T)
+    return PSVD(u, s, vt, T[], BlasInt[], Tr[])
+  end
+
+  if typeof(alg) <: LinearAlgebra.QRIteration
+    F = psvd_workspace_qr(A, full = full)
+    return psvd_qr!(F, destructive ? A : copy(A); full = full)
+  else
+    F = psvd_workspace_dd(A, full = full)
+    return psvd_dd!(F, destructive ? A : copy(A); full = full)
+  end
 end
 
 # iteration for destructuring into components
