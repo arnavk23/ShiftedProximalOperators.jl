@@ -124,24 +124,41 @@ function prox!(
   VI <: AbstractArray{<:Integer},
 }
   ψ.sol .= q .+ ψ.xk .+ ψ.sj
-  # Helper functions for group norm computation
-  l2prox(x, a) = max(0, 1 - a / norm(x)) .* x
-  
+
+  # buffer to reuse for block computations
+  tmp = similar(ψ.sol)
+
   for (idx, λ) ∈ zip(ψ.h.idx, ψ.h.lambda)
     σλ = λ * σ
-    # Simple projection approach for box constraints
-    # Project onto the group norm and then onto the box constraints
-    y_temp = l2prox(ψ.sol[idx] .- ψ.xk[idx] .- ψ.sj[idx], σλ)
-    
-    # Apply box constraints elementwise
-    # Apply box constraints elementwise for each index in idx
-    for (i, global_i) ∈ enumerate(idx)
+    @views begin
+      solb = ψ.sol[idx]
+      xkb = ψ.xk[idx]
+      sjb = ψ.sj[idx]
+    end
+
+    # compute tmpb = solb .- xkb .- sjb
+    tmpb = tmp[1:length(solb)]
+    @inbounds for i in eachindex(solb)
+      tmpb[i] = solb[i] - xkb[i] - sjb[i]
+    end
+
+    # l2prox in-place into tmpb
+    s = zero(eltype(tmpb))
+    @inbounds for i in eachindex(tmpb)
+      s += tmpb[i]^2
+    end
+    s = sqrt(s)
+    factor = s == 0 ? zero(eltype(s)) : max(0, 1 - σλ / s)
+    @inbounds for i in eachindex(tmpb)
+      tmpb[i] = factor * tmpb[i]
+    end
+
+    # Apply box constraints elementwise and write to y
+    @inbounds for (i, global_i) in enumerate(idx)
       li = isa(ψ.l, Real) ? ψ.l : ψ.l[global_i]
       ui = isa(ψ.u, Real) ? ψ.u : ψ.u[global_i]
-      y_temp[i] = min(max(y_temp[i], li), ui)
+      y[global_i] = min(max(tmpb[i], li), ui)
     end
-    
-    y[idx] .= y_temp
   end
   return y
 end

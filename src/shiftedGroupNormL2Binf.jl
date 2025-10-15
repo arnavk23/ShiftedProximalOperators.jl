@@ -70,41 +70,101 @@ function prox!(
 }
   ψ.sol .= q .+ ψ.xk .+ ψ.sj
   ϵ = 1 ## sasha's initial guess
-  softthres(x, a) = sign.(x) .* max.(0, abs.(x) .- a)
-  l2prox(x, a) = max(0, 1 - a / norm(x)) .* x
+
+  # Preallocate a temporary buffer once and reuse per-block to avoid allocations
+  tmp = similar(ψ.sol)
+
   for (idx, λ) ∈ zip(ψ.h.idx, ψ.h.lambda)
     σλ = λ * σ
-    ## find root for each block
-    froot(n) =
-      n - norm(
-        σ .* softthres(
-          (ψ.sol[idx] ./ σ .- (n / (σ * (n - σλ))) .* ψ.xk[idx]),
-          ψ.Δ * (n / (σ * (n - σλ))),
-        ) .- ψ.sol[idx],
-      )
+
+    # Views for block data
+    @views begin
+      solb = ψ.sol[idx]
+      xkb = ψ.xk[idx]
+      sjb = ψ.sj[idx]
+      tmpb = tmp[1:length(solb)]
+    end
+
+    # in-place soft threshold into tmpb: tmpb .= sign.(expr) .* max.(0, abs.(expr) .- a)
+    function softthres_block!(dest, a, nfactor)
+      @inbounds for i in eachindex(dest)
+        val = solb[i] / σ - nfactor * xkb[i]
+        dv = abs(val) - a
+        dest[i] = dv > 0 ? sign(val) * dv : zero(eltype(dest))
+      end
+    end
+
+    # compute froot using in-place operations
+    function froot(n)
+      nfac = n / (σ * (n - σλ))
+      ath = ψ.Δ * nfac
+      softthres_block!(tmpb, ath, nfac)
+      # tmpb currently holds softthres(expr, ath)
+      @inbounds begin
+        # compute tmpb .-= solb  (in-place)
+        s = zero(eltype(tmpb))
+        for i in eachindex(tmpb)
+          tmpb[i] -= solb[i]
+          s += tmpb[i]^2
+        end
+        return n - sqrt(s)
+      end
+    end
+
     lmin = σλ * (1 + eps(R)) # lower bound
     fl = froot(lmin)
 
     ansatz = lmin + ϵ #ansatz for upper bound
     step = ansatz / (σ * (ansatz - σλ))
-    zlmax = norm(softthres((ψ.sol[idx] ./ σ .- step .* ψ.xk[idx]), ψ.Δ * step))
-    lmax = norm(ψ.sol[idx]) + σ * (zlmax + abs((ϵ - 1) / ϵ + 1) * λ * norm(ψ.xk[idx]))
+    # compute zlmax using in-place softthres
+    softthres_block!(tmp[1:length(solb)], ψ.Δ * step, step)
+    zlmax = 0.0
+    @inbounds for i in 1:length(solb)
+      zlmax += tmp[i]^2
+    end
+    zlmax = sqrt(zlmax)
+
+    lmax = norm(solb) + σ * (zlmax + abs((ϵ - 1) / ϵ + 1) * λ * norm(xkb))
     fm = froot(lmax)
     if fl * fm > 0
-      y[idx] .= 0
+      @inbounds for i in eachindex(idx)
+        y[idx[i]] = zero(eltype(y))
+      end
     else
       n = fzero(froot, lmin, lmax)
       step = n / (σ * (n - σλ))
       if abs(n - σλ) ≈ 0
-        y[idx] .= 0
+        @inbounds for i in eachindex(idx)
+          y[idx[i]] = zero(eltype(y))
+        end
       else
-        y[idx] .= l2prox(
-          ψ.sol[idx] .- σ .* softthres((ψ.sol[idx] ./ σ .- step .* ψ.xk[idx]), ψ.Δ * step),
-          σλ,
-        )
+        # compute solb .- σ .* softthres(... ) into tmpb
+        nfac = step
+        ath = ψ.Δ * nfac
+        @inbounds for i in eachindex(solb)
+          val = solb[i] / σ - nfac * xkb[i]
+          dv = abs(val) - ath
+          tmpb[i] = dv > 0 ? sign(val) * dv : zero(eltype(tmpb))
+        end
+        @inbounds for i in eachindex(tmpb)
+          tmpb[i] = solb[i] - σ * tmpb[i]
+        end
+        # apply l2prox in-place into y[idx]
+        s = zero(eltype(tmpb))
+        @inbounds for i in eachindex(tmpb)
+          s += tmpb[i]^2
+        end
+        s = sqrt(s)
+        factor = s == 0 ? zero(eltype(s)) : max(0, 1 - σλ / s)
+        @inbounds for i in eachindex(tmpb)
+          y[idx[i]] = factor * tmpb[i]
+        end
       end
     end
-    y[idx] .-= (ψ.xk[idx] + ψ.sj[idx])
+    # subtract shifts in-place
+    @inbounds for (k, gi) in enumerate(idx)
+      y[gi] -= (ψ.xk[gi] + ψ.sj[gi])
+    end
   end
   return y
 end
