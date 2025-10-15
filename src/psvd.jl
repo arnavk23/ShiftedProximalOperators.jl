@@ -235,7 +235,7 @@ for (gesvd, elty, relty) in ((:zgesvd_, :ComplexF64, :Float64), (:cgesvd_, :Comp
       work = Vector{$elty}(undef, 1)
       lwork = BlasInt(-1)
       info = Ref{BlasInt}()
-      rwork = Vector{$relty}(undef, max(1, 5 * minmn))   # fixed: proper element type and expression
+      rwork = Vector{$relty}(undef, max(1, 5 * minmn))
       ccall(
         (@blasfunc($gesvd), libblastrampoline),
         Cvoid,
