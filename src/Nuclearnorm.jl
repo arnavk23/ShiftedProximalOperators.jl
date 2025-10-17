@@ -53,16 +53,23 @@ function prox!(
   x::AbstractVector{R},
   gamma::R,
 ) where {R <: Real, S <: AbstractArray, T, Tr, M <: AbstractArray{T}}
-  f.A .= reshape_array(x, size(f.A))
+  # copy reshaped x into internal matrix A
+  copyto!(f.A, reshape_array(x, size(f.A)))
   psvd_dd!(f.F, f.A, full = false)
   c = sqrt(2 * f.lambda * gamma)
-  f.F.S .= max.(0, f.F.S .- f.lambda * gamma)
+  # in-place shrink singular values
+  @inbounds for i in eachindex(f.F.S)
+    v = f.F.S[i] - f.lambda * gamma
+    f.F.S[i] = v > 0 ? v : zero(v)
+  end
+  # scale U by singular values in-place
   for i ∈ eachindex(f.F.S)
+    s = f.F.S[i]
     for j = 1:size(f.A, 1)
-      f.F.U[j, i] = f.F.U[j, i] * f.F.S[i]
+      f.F.U[j, i] = f.F.U[j, i] * s
     end
   end
   mul!(f.A, f.F.U, f.F.Vt)
-  y .= reshape_array(f.A, (size(y, 1), 1))
+  copyto!(y, reshape_array(f.A, (size(y, 1), 1)))
   return y
 end

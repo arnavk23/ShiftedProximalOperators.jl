@@ -66,13 +66,23 @@ function prox!(
   V2 <: AbstractVector{R},
 }
   λ = ψ.h.lambda
-  ψ.sol .= q .+ ψ.xk .+ ψ.sj
-  ψ.h.A .= reshape_array(ψ.sol, size(ψ.h.A))
+  # ψ.sol = q + ψ.xk + ψ.sj  (in-place to avoid temporaries)
+  copyto!(ψ.sol, q)
+  @inbounds for i in eachindex(ψ.sol)
+    ψ.sol[i] += ψ.xk[i] + ψ.sj[i]
+  end
+  # copy reshaped sol into A
+  copyto!(ψ.h.A, reshape_array(ψ.sol, size(ψ.h.A)))
   psvd_dd!(ψ.h.F, ψ.h.A, full = false)
-  ψ.h.F.S .= max.(0, ψ.h.F.S .- λ * σ)
+  # in-place positive thresholding
+  @inbounds for i in eachindex(ψ.h.F.S)
+    v = ψ.h.F.S[i] - λ * σ
+    ψ.h.F.S[i] = v > 0 ? v : zero(v)
+  end
   for i ∈ eachindex(ψ.h.F.S)
+    s = ψ.h.F.S[i]
     for j = 1:size(ψ.h.A, 1)
-      ψ.h.F.U[j, i] = ψ.h.F.U[j, i] .* ψ.h.F.S[i]
+      ψ.h.F.U[j, i] = ψ.h.F.U[j, i] * s
     end
   end
   mul!(ψ.h.A, ψ.h.F.U, ψ.h.F.Vt)

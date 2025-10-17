@@ -98,15 +98,30 @@ function prox!(
   q::AbstractVector{R},
   σ::R,
 ) where {I <: Integer, R <: Real, V0 <: AbstractVector{R}, V1 <: AbstractVector{R}, V2 <: AbstractVector{R}, V3, V4, VI <: AbstractArray{<:Integer}}
-  y .= ψ.xk .+ ψ.sj .+ q
+  # y = ψ.xk + ψ.sj + q in-place
+  copyto!(y, q)
+  @inbounds for i in eachindex(y)
+    y[i] += ψ.xk[i] + ψ.sj[i]
+  end
   # find largest entries
-  sortperm!(ψ.p, y, rev = true, by = abs) # stock with ψ.p as placeholder
-  y[ψ.p[(ψ.h.r + 1):end]] .= 0 # set smallest to zero
+  sortperm!(ψ.p, y, rev = true, by = abs) # use ψ.p as placeholder
+  # set smallest to zero
+  for idx in ψ.p[(ψ.h.r + 1):end]
+    y[idx] = 0
+  end
 
-  for i ∈ eachindex(y)
+  # clip back to box around the base shift
+  @inbounds for i in eachindex(y)
     li = isa(ψ.l, Real) ? ψ.l : ψ.l[i]
     ui = isa(ψ.u, Real) ? ψ.u : ψ.u[i]
-    y[i] = min(max(y[i] - (ψ.xk[i] + ψ.sj[i]), li), ui)
+    v = y[i] - (ψ.xk[i] + ψ.sj[i])
+    if v < li
+      y[i] = li
+    elseif v > ui
+      y[i] = ui
+    else
+      y[i] = v
+    end
   end
 
   return y

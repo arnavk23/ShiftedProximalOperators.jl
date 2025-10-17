@@ -66,16 +66,21 @@ function prox!(
   V2 <: AbstractVector{R},
 }
   λ = ψ.h.lambda
-  ψ.sol .= q .+ ψ.xk .+ ψ.sj
-  ψ.h.A .= reshape_array(ψ.sol, size(ψ.h.A))
+  # ψ.sol = q + ψ.xk + ψ.sj
+  copyto!(ψ.sol, q)
+  @inbounds for i in eachindex(ψ.sol)
+    ψ.sol[i] += ψ.xk[i] + ψ.sj[i]
+  end
+  copyto!(ψ.h.A, reshape_array(ψ.sol, size(ψ.h.A)))
   psvd_dd!(ψ.h.F, ψ.h.A, full = false)
   c = sqrt(2 * λ * σ)
   for i ∈ eachindex(ψ.h.F.S)
-    if ψ.h.F.S[i] <= c
-      ψ.h.F.U[:, i] .= 0
+    si = ψ.h.F.S[i]
+    if si <= c
+      fill!(view(ψ.h.F.U, :, i), zero(si))
     else
       for j = 1:size(ψ.h.A, 1)
-        ψ.h.F.U[j, i] = ψ.h.F.U[j, i] .* ψ.h.F.S[i]
+        ψ.h.F.U[j, i] = ψ.h.F.U[j, i] * si
       end
     end
   end
