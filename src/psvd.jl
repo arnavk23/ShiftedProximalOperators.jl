@@ -102,7 +102,7 @@ end
 # iteration for destructuring into components
 Base.iterate(S::PSVD) = (S.U, Val(:S))
 Base.iterate(S::PSVD, ::Val{:S}) = (S.S, Val(:V))
-Base.iterate(S::PSVD, ::Val{:V}) = (S.Vt, Val(:done))
+Base.iterate(S::PSVD, ::Val{:V}) = (S.Vt', Val(:done))
 Base.iterate(S::PSVD, ::Val{:done}) = nothing
 
 # Functions for alg = QRIteration()
