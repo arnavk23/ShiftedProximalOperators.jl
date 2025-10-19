@@ -39,12 +39,12 @@ end
   for (op, composite_op) ∈ ((:NormL2, :CompositeNormL2),)
     CompositeOp = eval(composite_op)
 
-    function c!(z, x)
+    function c_allocs!(z, x)
       z[1] = 2 * x[1] - x[4]
       z[2] = x[2] + x[3]
     end
 
-    function J!(z, x)
+    function J_allocs!(z, x)
       z.vals .= Float64[2.0, 1.0, 1.0, -1.0]
     end
     λ = 3.62
@@ -54,7 +54,7 @@ end
     b = zeros(Float64, 2)
     A = SparseMatrixCOO(Float64[2 0 0 -1; 0 1 1 0])
 
-    ψ = CompositeOp(λ, c!, J!, A, b)
+  ψ = CompositeOp(λ, c_allocs!, J_allocs!, A, b)
 
     # test shifted operator
     xk = [0.0, 1.1741, 0.0, -0.4754]
