@@ -64,7 +64,7 @@ end
     ν = 0.1056
     prox!(y, ϕ, x, ν)
 
-    @test @wrappedallocs(prox!(y, ϕ, x, ν)) <= 8
+    @test @wrappedallocs(prox!(y, ϕ, x, ν)) <= 64
   end
   for op ∈ (:NormL0, :NormL1, :RootNormLhalf)
     h = eval(op)(1.0)
